@@ -32,21 +32,21 @@ void model_test(Function model) {
     }
 }
 
-int main() {
-    // simulation settings
-    double ts = 0.01;
-    size_t N = 10;
-    // model parameters
-    double g = 9.8;
-    double m = 2.;
-    double cf = 8.54858e-06;
-    double ctf = 0.016;
-    double l = 0.174;
-    double min_motor_vel = 100;
-    double max_motor_vel = 1000;
-    DM mixing = compute_mixing(cf, ctf, l);
-    DM J = DM::diag({0.0217, 0.0217, 0.04});
-    // inputs
+double ts = 0.05;
+int N = 60;
+// model parameters
+double g = 9.8;
+double m = 2.;
+double cf = 8.54858e-06;
+double ctf = 0.016;
+double l = 0.174;
+double min_motor_vel = 100;
+double max_motor_vel = 1000;
+DM mixing = compute_mixing(cf, ctf, l);
+DM J = DM::diag({0.0217, 0.0217, 0.04});
+
+
+Function get_quad_model() {// inputs
     MX f = MX::sym("f");
     MX M = MX::sym("M", 3);
     // state variables
@@ -62,57 +62,66 @@ int main() {
     MX dp = v;
     MX dv = (thrust - m * g * e3) / m;
     MX dq = 0.5 * quat_mult(q, vertcat(0, w));
-    MX dw = mtimes(inv(J), (mtimes(hat(w), mtimes(J, w)) + M));
+    MX dw = mtimes(inv(J), (cross(w, mtimes(J, w)) + M));
     MX rhs = vertcat(dp, dv, dq, dw);
     MX state = vertcat(p, v, q, w);
     MX input = vertcat(f, M);
     MXDict ode = {{"x",   state},
                   {"p",   input},
                   {"ode", rhs}};
-    Function state_trans = integrator("F", "rk", ode, 0, ts);
+    return Function("dynamics", {state, input}, {rhs});
+//    Function state_trans = integrator("F", "rk", ode, 0, ts);
+//    return state_trans;
+}
 
+int main() {
+
+    // simulation settings
+
+    Function quad_model = get_quad_model();
     MX X0 = MX::sym("X0", 13);  // X0
-    MX X = MX::sym("X", 13, N);
+    MX Xd = MX::sym("Xd", 13, N + 1); // trajectory refence
+    MX X = MX::sym("X", 13, N + 1);
     MX U = MX::sym("U", 4, N); // Control vector
-    DM R = DM::diag({0.001, 0., 0., 0.});
+    DM R = DM::diag({0.0001, 0., 0., 0.});
     DM Q = DM::diag({1., 1., 1.,
                      0., 0., 0.,
-                     0., 0., 0., 0.,
+                     0.1, 0.1, 0.1, 0.1,
                      0., 0., 0.});
     DM P = DM::diag({1., 1., 1.,
                      0., 0., 0.,
-                     0., 0., 0., 0.,
+                     0.1, 0.1, 0.1, 0.1,
                      0., 0., 0.});
-    MX Xd = MX::sym("Xd", 13, N + 1); // trajectory refence
-    MX obj = 0;                       // cost
+    MX obj = 0;    // cost
     std::vector<MX> constraints;
-    MX Xk = X0;
+    constraints.push_back(X(Slice(), 0) - X0);//initial condition constraint
+    std::vector<double> lbg{}, ubg{};
+    std::vector<double> equal_bound(13, 0);
+    std::vector<double> actuator_lb(4, min_motor_vel * min_motor_vel);
+    std::vector<double> actuator_ub(4, max_motor_vel * max_motor_vel);
+    lbg = join(lbg, equal_bound);
+    ubg = join(ubg, equal_bound);
     for (size_t k = 0; k < N; k++) {
         MX Uk = U(Slice(), k);
-        MX X_err = Xk - Xd(Slice(), k);
+        MX X_err = X(Slice(), k) - Xd(Slice(), k);
         obj += dot(Uk, mtimes(R, Uk)) + dot(X_err, mtimes(Q, X_err));
+        auto Xdot = quad_model({X(Slice(), k), Uk});
+//        auto Xdot = res["xf"];
+        constraints.push_back(X(Slice(), k + 1) - X(Slice(), k) - Xdot[0] * ts);
         constraints.push_back(mtimes(mixing, Uk));
-        auto res = state_trans({{"x0", Xk},
-                                {"p",  Uk}});
-        Xk = res["xf"];
+        lbg = join(lbg, equal_bound);
+        lbg = join(lbg, actuator_lb);
+        ubg = join(ubg, equal_bound);
+        ubg = join(ubg, actuator_ub);
     }
-    obj += dot(Xk - Xd(Slice(), N), mtimes(P, (Xk - Xd(Slice(), N))));
+    obj += dot(X(Slice(), N) - Xd(Slice(), N), mtimes(P, (X(Slice(), N) - Xd(Slice(), N))));
 
-    // X0 = DM(std::vector<double>{0, 0, 0,
-    //                             0, 0, 0,
-    //                             1, 0, 0, 0,
-    //                             0, 0, 0});
-    // U = reshape(DM(std::vector<double>(40)), 4, 10);
-    // Xd=trajectory_gen(0, ts, N);
-    // cout<<obj<<"\n";
-    MXDict nlp = {{"x", reshape(U, 4 * N, 1)},
-                  {"p", horzcat(X0, Xd)},
+    MXDict nlp = {{"x", vertcat(reshape(U, -1, 1), reshape(X, -1, 1))},
+                  {"p", vertcat(X0, reshape(Xd, -1, 1))},
                   {"f", obj},
                   {"g", vertcat(constraints)}}; // TO TEST
     Function quadMPC = nlpsol("solver", "ipopt", nlp, {{"ipopt.print_level", 5}});
 
-    std::vector<double> lbg(4 * N, min_motor_vel * min_motor_vel);
-    std::vector<double> ubg(4 * N, max_motor_vel * max_motor_vel);
     DM initial_state = DM(std::vector<double>{0, 0, 0,
                                               0, 0, 0,
                                               1, 0, 0, 0,
@@ -123,12 +132,15 @@ int main() {
     DM current_state = initial_state;
     for (size_t i = 0; i < 100; i++) {
         DM traj = trajectory_gen(i * ts, ts, N);
-        DMDict arg = {{"x0",  initial_guess},
-                      {"p",   horzcat(current_state, traj)},
+        DMDict arg = {{"p",   vertcat(current_state, reshape(traj, -1, 1))},
                       {"lbg", lbg},
                       {"ubg", ubg}};
         DMDict res = quadMPC(arg);
-        cout << res;
+        MX control_solution = res["x"](Slice(0, 4 * N));
+        control_solution = reshape(control_solution, 4, N);
+        MX open_traj = res["x"](Slice(4 * N, 4 * N + 13 * (N + 1)));
+        open_traj = reshape(open_traj, 13, N + 1);
+        cout << "control:" << control_solution << "\n" << "open traj:" << open_traj;
         // break;
 //        auto current_input = res["x"](Slice(0, 4));
 //        res = state_trans({DMDict{{"x0", current_state}, {"p", current_input}}});
@@ -149,9 +161,13 @@ int main() {
 DM trajectory_gen(double _t, double _ts, size_t _N) {
     DM traj = DM(13, _N + 1);
     for (size_t i = 0; i <= _N; i++) {
-        traj(0, i) = 0.3;
-        traj(1, i) = 0.3;
-        traj(2, i) = 0.3;
+        traj(0, i) = 1;
+        traj(1, i) = 1;
+        traj(2, i) = 1;
+        traj(6, i) = 1;
+        traj(7, i) = 0;
+        traj(8, i) = 0;
+        traj(9, i) = 0;
         // traj(0, i) = cos(_t) - 1;
         // traj(1, i) = sin(_t);
         // traj(2, i) = sin(_t);
