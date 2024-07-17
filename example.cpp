@@ -1,52 +1,52 @@
 #include <casadi/casadi.hpp>
+#include <iostream>
+#include "string"
+#include "Quaternion_mpc.hpp"
 
+using std::cout;
 using namespace casadi;
 
+DM trajectory_gen(double _t, double _ts, size_t _N);
+
 int main() {
-//    MX x = MX::sym("x", 2); // Two states
-//    MX p = MX::sym("p");    // Free parameter
-//
-//    // Expression for ODE right-hand side
-//    MX z = 1 - pow(x(1), 2);
-//    MX rhs = vertcat(z * x(0) - x(1) + 2 * tanh(p), x(0));
-//
-//    // ODE declaration with free parameter
-//    MXDict ode = {{"x", x}, {"p", p}, {"ode", rhs}};
-//
-//    // Construct a Function that integrates over 1s
-//    Function F = integrator("F", "cvodes", ode, 0, 1);
-//
-//    // Control vector
-//    MX u = MX::sym("u", 4, 1);
-//
-//    x = DM(std::vector<double>{0, 1}); // Initial state
-//    for (int k = 0; k < 4; ++k)
-//    {
-//        // Integrate 1s forward in time:
-//        // call integrator symbolically
-//        MXDict res = F({{"x0", x}, {"p", u(k)}});
-//        x = res["xf"];
-//    }
-//
-//    // NLP declaration
-//    MXDict nlp = {{"x", u}, {"f", dot(u, u)}, {"g", x}};
-//
-//    // Solve using IPOPT
-//    Function solver = nlpsol("solver", "ipopt", nlp);
-//    DMDict res = solver(DMDict{{"x0", 0.2}, {"lbg", 0}, {"ubg", 0}});
-// Create scalar/matrix symbols
-    MX x = MX::sym("x", 5, 1);
+    double ts = 0.05;
+    int N = 60;
+    problem_params_t problem_params{};
+    problem_params.ts = ts;
+    problem_params.N = N;
+    model_params_t model_params{};
+    // simulation settings
+    Quaternion_mpc controller(problem_params, model_params);
 
-// Compose into expressions
-    MX y = norm_2(x);
-
-// Sensitivity of expression -> new expression
-    MX grad_y = gradient(y, x);
-
-// Create a Function to evaluate expression
-    Function f = Function("f", {x}, {grad_y});
-
-// Evaluate numerically
-    std::vector<DM> grad_y_num = f(DM({1, 2, 3, 4, 5}));
-    std::cout << grad_y_num[0];
+    DM initial_state = DM(std::vector<double>{0, 0, 0,
+                                              0, 0, 0,
+                                              1, 0, 0, 0,
+                                              0, 0, 0});
+    DM traj = trajectory_gen(0, ts, N);
+    auto res = controller.compute(initial_state, traj);
+    MX control_solution = res["x"](Slice(0, 4 * N));
+    control_solution = reshape(control_solution, 4, N);
+    MX open_traj = res["x"](Slice(4 * N, 4 * N + 13 * (N + 1)));
+    open_traj = reshape(open_traj, 13, N + 1);
+    cout << "control:" << control_solution << "\n" << "open traj:" << open_traj;
+    return 0;
 }
+
+DM trajectory_gen(double _t, double _ts, size_t _N) {
+    DM traj = DM(13, _N + 1);
+    for (size_t i = 0; i <= _N; i++) {
+        traj(0, i) = 1;
+        traj(1, i) = 1;
+        traj(2, i) = 1;
+        traj(6, i) = 1;
+        traj(7, i) = 0;
+        traj(8, i) = 0;
+        traj(9, i) = 0;
+        // traj(0, i) = cos(_t) - 1;
+        // traj(1, i) = sin(_t);
+        // traj(2, i) = sin(_t);
+        _t += _ts;
+    }
+    return traj;
+}
+

@@ -3,11 +3,13 @@ project(mpc_quad VERSION 0.1.0 LANGUAGES C CXX)
 
 find_package(casadi REQUIRED)
 find_package(Eigen3 REQUIRED)
-add_executable(mpc_quad mpc_quad.cpp)
-target_link_libraries(mpc_quad casadi)
+find_package(NLopt REQUIRED)
+find_package(autodiff REQUIRED)
+
+add_library(quaternion_mpc STATIC Quaternion_mpc.cpp)
+target_link_libraries(quaternion_mpc PUBLIC casadi)
 
 add_executable(example example.cpp)
-target_link_libraries(example casadi)
+target_link_libraries(example quaternion_mpc)
 
-add_executable(quad_dynamic_sim quad_dynamics.cpp)
-target_link_libraries(quad_dynamic_sim Eigen3::Eigen)
+
