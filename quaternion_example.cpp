@@ -1,3 +1,6 @@
+//
+// Created by lay on 24-7-17.
+//
 #include <casadi/casadi.hpp>
 #include <iostream>
 #include "string"
@@ -11,10 +14,10 @@ DM trajectory_gen(double _t, double _ts, size_t _N);
 int main() {
     double ts = 0.05;
     int N = 60;
-    problem_params_t problem_params{};
+    Quaternion_mpc::problem_params_t problem_params{};
     problem_params.ts = ts;
     problem_params.N = N;
-    model_params_t model_params{};
+    Quaternion_mpc::model_params_t model_params{};
     // simulation settings
     Quaternion_mpc controller(problem_params, model_params);
 
@@ -49,4 +52,3 @@ DM trajectory_gen(double _t, double _ts, size_t _N) {
     }
     return traj;
 }
-
