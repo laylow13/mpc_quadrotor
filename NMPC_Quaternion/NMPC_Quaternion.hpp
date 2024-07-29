@@ -10,7 +10,7 @@ using namespace casadi;
 
 
 
-class Quaternion_mpc {
+class NMPC_Quaternion {
 public:
     struct problem_params_t {
         double ts = 0.05;
@@ -39,7 +39,7 @@ public:
     };
 
 
-    Quaternion_mpc(problem_params_t problem_params_, model_params_t model_params_);
+    NMPC_Quaternion(problem_params_t problem_params_, model_params_t model_params_);
 
     DMDict compute(const DM &current_state_, const DM &traj_);
 

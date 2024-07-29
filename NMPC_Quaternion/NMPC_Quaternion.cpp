@@ -2,9 +2,9 @@
 // Created by lay on 24-7-17.
 //
 
-#include "Quaternion_mpc.hpp"
+#include "NMPC_Quaternion.hpp"
 
-Quaternion_mpc::Quaternion_mpc(problem_params_t problem_params_, model_params_t model_params_) :
+NMPC_Quaternion::NMPC_Quaternion(problem_params_t problem_params_, model_params_t model_params_) :
         problem_params(
                 problem_params_),
         model_params(
@@ -14,7 +14,7 @@ Quaternion_mpc::Quaternion_mpc(problem_params_t problem_params_, model_params_t 
 };
 
 
-void Quaternion_mpc::init_mpc_problem() {
+void NMPC_Quaternion::init_mpc_problem() {
     Function dynamics = quaternion_dynamics(model_params);
     double ts = problem_params.ts;
     int N = problem_params.N;
@@ -60,25 +60,25 @@ void Quaternion_mpc::init_mpc_problem() {
            {"g", vertcat(constraints)}};
 }
 
-void Quaternion_mpc::init_solver(std::string solver_type, std::map<std::string, GenericType> solver_opts) {
+void NMPC_Quaternion::init_solver(std::string solver_type, std::map<std::string, GenericType> solver_opts) {
     mpc_solver = nlpsol("solver", solver_type, nlp, solver_opts);
 }
 
-void Quaternion_mpc::get_mpc_problem(MXDict &problem_, std::vector<double> &lbg_, std::vector<double> &ubg_) const {
+void NMPC_Quaternion::get_mpc_problem(MXDict &problem_, std::vector<double> &lbg_, std::vector<double> &ubg_) const {
     problem_ = nlp;
     lbg_ = lbg;
     ubg_ = ubg;
 }
 
 void
-Quaternion_mpc::set_mpc_problem(const MXDict &problem_, const std::vector<double> &lbg_,
-                                const std::vector<double> &ubg_) {
+NMPC_Quaternion::set_mpc_problem(const MXDict &problem_, const std::vector<double> &lbg_,
+                                 const std::vector<double> &ubg_) {
     nlp = problem_;
     lbg = lbg_;
     ubg = ubg_;
 }
 
-Function Quaternion_mpc::quaternion_dynamics(model_params_t params_) {// inputs
+Function NMPC_Quaternion::quaternion_dynamics(model_params_t params_) {// inputs
     double g = params_.g;
     double m = params_.m;
     DM J = DM::diag({params_.Jxx, params_.Jyy, params_.Jzz});
@@ -109,14 +109,14 @@ Function Quaternion_mpc::quaternion_dynamics(model_params_t params_) {// inputs
 }
 
 
-DMDict Quaternion_mpc::compute(const DM &current_state_, const DM &traj_) {
+DMDict NMPC_Quaternion::compute(const DM &current_state_, const DM &traj_) {
     DMDict arg = {{"p",   vertcat(current_state_, reshape(traj_, -1, 1))},
                   {"lbg", lbg},
                   {"ubg", ubg}};
     return mpc_solver(arg);
 }
 
-DM Quaternion_mpc::compute_mixing(double _cf, double _ctf, double _l) {
+DM NMPC_Quaternion::compute_mixing(double _cf, double _ctf, double _l) {
     DM effectiveness = DM::zeros(4, 4);
     effectiveness(0, 0) = 1;
     effectiveness(0, 1) = 1;
@@ -141,7 +141,7 @@ DM Quaternion_mpc::compute_mixing(double _cf, double _ctf, double _l) {
     return inv(effectiveness);
 }
 
-MX Quaternion_mpc::hat(const MX &_v) {
+MX NMPC_Quaternion::hat(const MX &_v) {
     MX _v_hat = MX::zeros(3, 3);
     _v_hat(0, 1) = -_v(2);
     _v_hat(0, 2) = _v(1);
@@ -152,7 +152,7 @@ MX Quaternion_mpc::hat(const MX &_v) {
     return _v_hat;
 }
 
-MX Quaternion_mpc::quat_mult(const MX &_q1, const MX &_q2) {
+MX NMPC_Quaternion::quat_mult(const MX &_q1, const MX &_q2) {
     if (_q1.size1() != 4 || _q1.size2() != 1 || _q2.size1() != 4 || _q2.size2() != 1)
         throw std::runtime_error("InputVar quaternions must be 4x1 vectors.");
     MX w1 = _q1(0), x1 = _q1(1), y1 = _q1(2), z1 = _q1(3);
@@ -166,7 +166,7 @@ MX Quaternion_mpc::quat_mult(const MX &_q1, const MX &_q2) {
     return vertcat(w, x, y, z);
 }
 
-MX Quaternion_mpc::quat_rotate_vec(const MX &_q, const MX &_v) {
+MX NMPC_Quaternion::quat_rotate_vec(const MX &_q, const MX &_v) {
     if (_q.size1() != 4 || _q.size2() != 1 || _v.size1() != 3 || _v.size2() != 1)
         throw std::runtime_error("InputVar quaternions must be 4x1 vectors.");
     MX _q_conj = vertcat(_q(0), -_q(1), -_q(2), -_q(3));
@@ -175,7 +175,7 @@ MX Quaternion_mpc::quat_rotate_vec(const MX &_q, const MX &_v) {
     return _v_rot(Slice(1, 4));
 }
 
-void Quaternion_mpc::quat_normalize(MX &_q) {
+void NMPC_Quaternion::quat_normalize(MX &_q) {
     if (_q.size1() != 4 || _q.size2() != 1)
         throw std::runtime_error("InputVar quaternions must be 4x1 vectors.");
     MX _q_norm = norm_1(_q);

@@ -1,7 +1,7 @@
 #include <casadi/casadi.hpp>
 #include <iostream>
 #include "string"
-#include "Euler_mpc.hpp"
+#include "NMPC_Euler.hpp"
 
 using std::cout;
 using namespace casadi;
@@ -9,14 +9,14 @@ using namespace casadi;
 DM trajectory_gen(double _t, double _ts, size_t _N);
 
 int main() {
-    double ts = 0.05;
-    int N = 60;
-    Euler_mpc::problem_params_t problem_params{};
+    double ts = 0.01;
+    int N = 10;
+    NMPC_Euler::problem_params_t problem_params{};
     problem_params.ts = ts;
     problem_params.N = N;
-    Euler_mpc::model_params_t model_params{};
+    NMPC_Euler::model_params_t model_params{};
     // simulation settings
-    Euler_mpc controller(problem_params, model_params);
+    NMPC_Euler controller(problem_params, model_params);
 
     DM initial_state = DM(std::vector<double>{0, 0, 0,
                                               0, 0, 0,

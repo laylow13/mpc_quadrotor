@@ -1,14 +1,12 @@
 //
-// Created by lay on 24-7-17.
+// Created by lay on 24-7-18.
 //
-#pragma once
 
+#pragma once
 #include "casadi/casadi.hpp"
 
 using namespace casadi;
-
-
-class Euler_mpc {
+class LMPC_Full {
 public:
     struct problem_params_t {
         double ts = 0.05;
@@ -36,7 +34,7 @@ public:
         double Jzz = 0.04;
     };
 
-    Euler_mpc(problem_params_t problem_params_, model_params_t model_params_);
+    LMPC_Full(problem_params_t problem_params_, model_params_t model_params_);
 
     DMDict compute(const DM &current_state_, const DM &traj_);
 
@@ -47,7 +45,7 @@ public:
 
     void set_mpc_problem(const MXDict &problem_, const std::vector<double> &lbg_, const std::vector<double> &ubg_);
 
-    static Function euler_dynamics(model_params_t params_);
+    static Function linearized_dynamics(LMPC_Full::model_params_t params_);
 
     DM compute_mixing(double _cf, double _ctf, double _l);
 
@@ -61,3 +59,4 @@ private:
     MXDict nlp;
     Function mpc_solver;
 };
+
